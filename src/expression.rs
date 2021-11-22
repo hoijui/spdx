@@ -153,11 +153,11 @@ impl Expression {
         result_stack.pop().unwrap()
     }
 
-    /// Just as with evaluate, the license expression is evaluated to see if
+    /// Just as with [`Self::evaluate`], the license expression is evaluated to see if
     /// enough license requirements in the expresssion are met for the evaluation
     /// to succeed, except this method also keeps track of each failed requirement
     /// and returns them, allowing for more detailed error reporting about precisely
-    /// what terms in the expression caused the overall failure
+    /// what terms in the expression caused the overall failure.
     pub fn evaluate_with_failures<AF: FnMut(&LicenseReq) -> bool>(
         &self,
         mut allow_func: AF,
