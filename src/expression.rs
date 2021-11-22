@@ -72,6 +72,45 @@ pub struct Expression {
     pub(crate) original: String,
 }
 
+/// An owned/no-lifetimes transcription of `Vec<&spdx::expression::ExpressionReq>`
+#[derive(Debug, Clone)]
+pub struct EvaluationError {
+    // The original expression that the ranges of the expressions reffer to
+    pub expression: String,
+    /// The list of expressions that Failed
+    pub failed: Vec<ExpressionReq>,
+}
+
+impl From<(String, Vec<&ExpressionReq>)> for EvaluationError {
+    fn from((expression, failures): (String, Vec<&ExpressionReq>)) -> Self {
+        Self {
+            expression,
+            failed: failures.iter().map(|req| req.to_owned().clone()).collect(),
+        }
+    }
+}
+
+impl fmt::Display for EvaluationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!(
+            "evaluation failure(s) in SPDX expression \"{}\": [",
+            self.expression
+        ))?;
+        for req in &self.failed {
+            // f.write_fmt(format_args!("    Failed '{}' at \"{}\"", req.req, self.expression[(req.span.start)..(req.span.end)]))?;
+            let expr_part = &self.expression[(req.span.start as usize)..(req.span.end as usize)];
+            f.write_fmt(format_args!(
+                "{{ '{}' - @({},{}) - \"{}\" }}, ",
+                req.req, req.span.start, req.span.end, expr_part
+            ))?;
+        }
+        f.write_str("]")?;
+        Ok(())
+    }
+}
+
+impl std::error::Error for EvaluationError {}
+
 impl Expression {
     /// Returns each of the license requirements in the license expression,
     /// but not the operators that join them together
@@ -198,6 +237,22 @@ impl Expression {
         } else {
             Ok(())
         }
+    }
+
+    /// Just like [`Self::evaluate_with_failures`], but returning a fully owned Error
+    /// instead of the leight-weight but borrowed `Vec<&ExpressionReq>`.
+    /// The content of the error value is the same, though.
+    /// This is more comfortable to use in a chain of errors,
+    /// or say, if you do not want to handle the error right in the scope you call this function,
+    /// but rather higher up in the call hierarchy,
+    /// and you do not want to write your own wrapper,
+    /// with custom formatting to a string.
+    pub fn evaluate_with_wrapped_failures<AF: FnMut(&LicenseReq) -> bool>(
+        &self,
+        allow_func: AF,
+    ) -> Result<(), EvaluationError> {
+        self.evaluate_with_failures(allow_func)
+            .map_err(|failures| EvaluationError::from((self.original.clone(), failures)))
     }
 }
 
